@@ -1,0 +1,74 @@
+
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+
+const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.send(`
+    <h1>CFP Game Zone Server</h1>
+    <p>Server is running.</p>
+    <p>Welcome to CFP Game Zone!</p>
+  `);
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    app: "CFP Game Zone"
+  });
+});
+
+io.on("connection", (socket) => {
+  console.log("Player connected:", socket.id);
+
+  socket.on("join-room", (roomName) => {
+    if (typeof roomName !== "string" || !roomName.trim()) return;
+
+    socket.join(roomName.trim());
+    socket.emit("room-joined", roomName.trim());
+    socket.to(roomName.trim()).emit("player-joined", {
+      message: "A player joined your room"
+    });
+  });
+
+  socket.on("chat-message", (data) => {
+    if (
+      !data ||
+      typeof data.room !== "string" ||
+      typeof data.message !== "string"
+    ) return;
+
+    const room = data.room.trim();
+    const message = data.message.trim();
+
+    if (!room || !message || message.length > 1000) return;
+
+    io.to(room).emit("chat-message", {
+      message,
+      sender: socket.id,
+      time: new Date().toISOString()
+    });
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Player disconnected:", socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`CFP Game Zone running on port ${PORT}`);
+});
